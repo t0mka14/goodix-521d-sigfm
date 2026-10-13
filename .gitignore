@@ -1,0 +1,10 @@
+# libfprint checkout and build made by build.sh
+/libfprint/
+
+# Never commit keys, sealed keys, sensor calibration or fingerprint data
+*.psk
+*.bin
+*.npy
+*.pgm
+mcu_hash.txt
+goodix-psk/

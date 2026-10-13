@@ -1,0 +1,95 @@
+diff --git a/libfprint/fprint-list-udev-hwdb.c b/libfprint/fprint-list-udev-hwdb.c
+index 0527db1..6f21ca5 100644
+--- a/libfprint/fprint-list-udev-hwdb.c
++++ b/libfprint/fprint-list-udev-hwdb.c
+@@ -129,7 +129,6 @@ static const FpIdEntry allowlist_id_table[] = {
+   { .vid = 0x27c6, .pid = 0x5120 },
+   { .vid = 0x27c6, .pid = 0x5125 },
+   { .vid = 0x27c6, .pid = 0x5201 },
+-  { .vid = 0x27c6, .pid = 0x521d },
+   { .vid = 0x27c6, .pid = 0x5301 },
+   { .vid = 0x27c6, .pid = 0x530c },
+   { .vid = 0x27c6, .pid = 0x532d },
+diff --git a/libfprint/meson.build b/libfprint/meson.build
+index 3449481..05c03e5 100644
+--- a/libfprint/meson.build
++++ b/libfprint/meson.build
+@@ -153,6 +153,10 @@ driver_sources = {
+         [ 'drivers/realtek/realtek.c' ],
+     'focaltech_moc' :
+         [ 'drivers/focaltech_moc/focaltech_moc.c' ],
++    'goodix521d' :
++        [ 'drivers/goodix521d/goodix521d.c',
++          'drivers/goodix521d/goodix521d_config.c',
++          'drivers/goodix521d/sigfm.cpp' ],
+ }
+ 
+ helper_sources = {
+@@ -164,6 +168,8 @@ helper_sources = {
+         [ 'drivers/aes3k.c' ],
+     'openssl' :
+         [ ],
++    'opencv' :
++        [ ],
+     'udev' :
+         [ ],
+     'virtual' :
+diff --git a/meson.build b/meson.build
+index 14fb11f..b784c42 100644
+--- a/meson.build
++++ b/meson.build
+@@ -144,6 +144,7 @@ default_drivers = [
+     'fpcmoc',
+     'realtek',
+     'focaltech_moc',
++    'goodix521d',
+ ]
+ 
+ spi_drivers = [
+@@ -210,6 +211,7 @@ driver_helper_mapping = {
+     'aes3500' : [ 'aeslib', 'aes3k' ],
+     'aes4000' : [ 'aeslib', 'aes3k' ],
+     'uru4000' : [ 'openssl' ],
++    'goodix521d' : [ 'openssl', 'opencv' ],
+     'elanspi' : [ 'udev' ],
+     'virtual_image'          : [ 'virtual' ],
+     'virtual_device'         : [ 'virtual' ],
+@@ -273,6 +275,26 @@ foreach i : driver_helpers
+         endif
+ 
+         optional_deps += openssl_dep
++    elif i == 'opencv'
++        # SIFT lives in features2d (OpenCV >= 4.4). Distributions only ship
++        # opencv4.pc with the full -dev metapackage, so fall back to the
++        # three libraries the matcher needs.
++        opencv_dep = dependency('opencv4', version: '>= 4.4', required: false)
++        if not opencv_dep.found()
++            opencv_libs = []
++            foreach lib : [ 'opencv_features2d', 'opencv_imgproc', 'opencv_core' ]
++                opencv_libs += cpp.find_library(lib, required: false)
++            endforeach
++            opencv_inc = get_option('opencv_includedir')
++            if not opencv_libs[0].found() or not cpp.has_header('opencv2/features2d.hpp',
++                    args: '-I' + opencv_inc)
++                error('OpenCV (core, imgproc, features2d) is required for @0@'.format(driver))
++            endif
++            opencv_dep = declare_dependency(dependencies: opencv_libs,
++                compile_args: '-I' + opencv_inc)
++        endif
++
++        optional_deps += opencv_dep
+     elif i == 'udev'
+         install_udev_rules = true
+ 
+diff --git a/meson_options.txt b/meson_options.txt
+index 3c4cd26..dc433ba 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -34,3 +34,7 @@ option('installed-tests',
+        description: 'Whether to install the installed tests',
+        type: 'boolean',
+        value: true)
++option('opencv_includedir',
++       description: 'OpenCV 4 headers, used when opencv4.pc is not installed',
++       type: 'string',
++       value: '/usr/include/opencv4')
